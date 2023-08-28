@@ -2,8 +2,14 @@ package pinchcliffe
 
 import (
 	"encoding/binary"
+	"io"
 	"os"
 	"path/filepath"
+)
+
+const (
+	SIZE_MAGIC             = 0x8
+	SIZE_FILEHEADER_STRUCT = 0x108
 )
 
 func ExtractArchive(archive, outfolder string) {
@@ -15,23 +21,23 @@ func ExtractArchive(archive, outfolder string) {
 
 	defer file.Close()
 
-	file.Seek(0x8, 0)
+	file.Seek(SIZE_MAGIC, io.SeekStart)
 	var filecount uint32
 	binary.Read(file, binary.LittleEndian, &filecount)
 	for i := 0; i < int(filecount); i++ {
+		header := make([]byte, SIZE_FILEHEADER_STRUCT)
+		binary.Read(file, binary.LittleEndian, &header)
+
 		filename := ""
-		for {
-			var tmp byte
-			binary.Read(file, binary.LittleEndian, &tmp)
-			if tmp == 0x00 {
+		for _, b := range header {
+			if b == 0x00 {
 				break
 			}
-			filename += string(tmp)
+			filename += string(b)
 		}
 
-		file.Seek(0x104-(int64(len(filename))+1), 1)
-		var filelength uint32
-		binary.Read(file, binary.LittleEndian, &filelength)
+		// The last 4 bytes (uint32) in the header indicates the filelength
+		filelength := binary.LittleEndian.Uint32(header[len(header)-4:])
 
 		content := make([]byte, filelength)
 		binary.Read(file, binary.LittleEndian, &content)
